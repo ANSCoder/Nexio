@@ -1,6 +1,6 @@
 # Nexio
 
-A lightweight Swift networking SDK. One package replaces Alamofire + Kingfisher.
+A lightweight, actor-based Swift networking SDK — typed requests, auth, retry, interceptors, and SwiftUI image loading in one zero-dependency package.
 
 **Pure Swift 6.2 · Actor-based · Zero dependencies · iOS 16+ · macOS 13+**
 
