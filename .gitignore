@@ -1,0 +1,13 @@
+# Xcode / Swift Package Manager build products
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.swiftpm/xcode/package.xcworkspace/
+.swiftpm/xcode/xcuserdata/
+
+# macOS
+.DS_Store
+
+# Claude Code local session settings
+.claude/

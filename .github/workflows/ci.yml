@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── iOS ────────────────────────────────────────────────────────────────────
+  ios:
+    name: iOS ${{ matrix.ios }} / Xcode ${{ matrix.xcode }}
+    runs-on: macos-15
+    strategy:
+      matrix:
+        include:
+          - xcode: "16.3"
+            ios: "18.3"
+            simulator: "iPhone 16"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode ${{ matrix.xcode }}
+        run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
+
+      - name: Build & Test (iOS)
+        run: |
+          xcodebuild test \
+            -scheme Nexio \
+            -destination "platform=iOS Simulator,name=${{ matrix.simulator }},OS=${{ matrix.ios }}" \
+            -enableCodeCoverage YES \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            | xcpretty
+
+  # ── macOS ──────────────────────────────────────────────────────────────────
+  macos:
+    name: macOS / Swift Package
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16.3
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Test
+        run: swift test --parallel
+
+  # ── Swift 6 strict concurrency ────────────────────────────────────────────
+  swift6:
+    name: Swift 6 strict concurrency check
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16.3
+        run: sudo xcode-select -s /Applications/Xcode_16.3.app
+
+      - name: Build with strict concurrency
+        run: |
+          swift build \
+            -Xswiftc -strict-concurrency=complete \
+            -Xswiftc -warnings-as-errors
