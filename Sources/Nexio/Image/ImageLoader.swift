@@ -8,6 +8,11 @@ public typealias PlatformImage = UIImage
 import AppKit
 /// Platform-native image type. `NSImage` on macOS.
 public typealias PlatformImage = NSImage
+
+// `NSImage` predates Swift concurrency and isn't `Sendable`, but Nexio only
+// ever hands instances across actor boundaries as immutable, already-decoded
+// snapshots — never mutates them after `load(_:)` returns.
+extension NSImage: @retroactive @unchecked Sendable {}
 #endif
 
 // MARK: - ImageLoader
@@ -66,7 +71,7 @@ public actor ImageLoader {
     public func load(_ url: URL) async throws -> PlatformImage {
         let request = URLRequest(url: url)
         let (data, response) = try await session.nexioData(for: request)
-        if let httpError = (response as? HTTPURLResponse)?.nexioError(data: data) {
+        if let httpError = response.nexioError(data: data) {
             throw httpError
         }
         guard let image = PlatformImage(data: data) else {

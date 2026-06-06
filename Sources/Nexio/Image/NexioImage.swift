@@ -113,7 +113,7 @@ extension NexioImage where Placeholder == Color, Failure == Image {
         self.init(
             url,
             contentMode: contentMode,
-            placeholder: { Color(.systemGray5) },
+            placeholder: { Color.gray.opacity(0.2) },
             failureImage: { Image(systemName: "photo") },
             transition: transition
         )
