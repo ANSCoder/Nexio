@@ -48,6 +48,11 @@ public struct NexioConfig: Sendable {
     /// Console log verbosity. Defaults to ``LogLevel/none``.
     public var logLevel: LogLevel = .none
 
+    /// Custom `URLProtocol` classes layered onto the session ahead of the
+    /// system defaults — primarily for intercepting traffic in tests (e.g.
+    /// stubbing responses with a `URLProtocol` subclass). `nil` by default.
+    public var protocolClasses: [AnyClass]?
+
     // MARK: - Init
 
     /// Creates a default configuration.

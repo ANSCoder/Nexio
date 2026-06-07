@@ -89,6 +89,54 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 
+// MARK: - Cross-Suite Serialization
+
+/// `MockURLProtocol.responseStub` is one shared static slot. `@Suite(.serialized)`
+/// only keeps a suite's own tests from overlapping — it does nothing for tests
+/// in *other* suites racing the same slot. This actor-backed gate is the only
+/// thing that actually prevents that: every test that stubs a response must
+/// run its mocked-network span through ``mockingNetwork(_:)`` so only one
+/// holds the slot at a time, across every suite.
+private actor MockGate {
+    static let shared = MockGate()
+
+    private var isLocked = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func acquire() async {
+        if !isLocked {
+            isLocked = true
+            return
+        }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func release() {
+        if waiters.isEmpty {
+            isLocked = false
+        } else {
+            waiters.removeFirst().resume()
+        }
+    }
+}
+
+/// Runs `body` with exclusive access to ``MockURLProtocol``'s shared stub slot.
+///
+/// Wrap the stub-set → request → assert span of any test that drives a
+/// `NexioClient` through `MockURLProtocol` in this — never just the `.stub(...)`
+/// call alone, since the slot must stay stable for the whole round trip.
+func mockingNetwork<T>(_ body: () async throws -> T) async throws -> T {
+    await MockGate.shared.acquire()
+    do {
+        let value = try await body()
+        await MockGate.shared.release()
+        return value
+    } catch {
+        await MockGate.shared.release()
+        throw error
+    }
+}
+
 // MARK: - URLSession convenience
 
 extension URLSession {

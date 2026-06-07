@@ -46,6 +46,9 @@ public actor NexioClient {
         let sessionConfig = URLSessionConfiguration.default
         sessionConfig.timeoutIntervalForRequest = config.timeout
         sessionConfig.httpAdditionalHeaders = config.defaultHeaders as [AnyHashable: Any]
+        if let protocolClasses = config.protocolClasses {
+            sessionConfig.protocolClasses = protocolClasses + (sessionConfig.protocolClasses ?? [])
+        }
         session = URLSession(configuration: sessionConfig)
     }
 

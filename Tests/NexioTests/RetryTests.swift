@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import Nexio
 
-@Suite("RetryInterceptor")
+@Suite("RetryInterceptor", .serialized)
 struct RetryTests {
 
     private struct Dummy: Decodable, Sendable {}
@@ -11,30 +11,33 @@ struct RetryTests {
 
     @Test("Retries on 503 up to maxAttempts, then throws")
     func retriesOnServerError() async throws {
-        var callCount = 0
-        MockURLProtocol.responseStub = nil
+        try await mockingNetwork {
+            MockURLProtocol.responseStub = nil
 
-        // Fail with 503 on every call
-        let counting = CountingProtocol { callCount += 1 }
-        _ = counting // used via side-effect in stub closure below
+            // Use a custom stub that always returns 503
+            MockURLProtocol.stub(statusCode: 503, data: Data())
 
-        // Use a custom stub that always returns 503
-        MockURLProtocol.stub(statusCode: 503, data: Data())
-        URLProtocol.registerClass(MockURLProtocol.self)
+            let policy = RetryPolicy(maxAttempts: 2, backoff: .none)
+            let retryInterceptor = RetryInterceptor(policy: policy)
 
-        let policy = RetryPolicy(maxAttempts: 2, backoff: .none)
-        let retryInterceptor = RetryInterceptor(policy: policy)
+            let client = NexioClient()
+            // `URLProtocol.registerClass` only intercepts the legacy URLConnection
+            // stack, never `URLSession` — route mocked traffic through
+            // `NexioConfig.protocolClasses`, which `configure(_:)` wires into
+            // the session it builds.
+            var config = NexioConfig()
+            config.protocolClasses = [MockURLProtocol.self]
+            await client.configure(config)
+            await client.addInterceptor(retryInterceptor)
 
-        let client = NexioClient()
-        await client.addInterceptor(retryInterceptor)
-
-        do {
-            let _: Dummy = try await client.get("https://api.test/flaky")
-            Issue.record("Expected serverError after exhausting retries")
-        } catch NexioError.serverError(let code, _) {
-            #expect(code == 503)
-        } catch {
-            Issue.record("Unexpected error: \(error)")
+            do {
+                let _: Dummy = try await client.get("https://api.test/flaky")
+                Issue.record("Expected serverError after exhausting retries")
+            } catch NexioError.serverError(let code, _) {
+                #expect(code == 503)
+            } catch {
+                Issue.record("Unexpected error: \(error)")
+            }
         }
     }
 
@@ -42,20 +45,24 @@ struct RetryTests {
 
     @Test("Does not retry on 401")
     func noRetryOn401() async throws {
-        MockURLProtocol.stub(statusCode: 401, data: Data())
-        URLProtocol.registerClass(MockURLProtocol.self)
+        try await mockingNetwork {
+            MockURLProtocol.stub(statusCode: 401, data: Data())
 
-        let retryInterceptor = RetryInterceptor(policy: .standard)
-        let client = NexioClient()
-        await client.addInterceptor(retryInterceptor)
+            let retryInterceptor = RetryInterceptor(policy: .standard)
+            let client = NexioClient()
+            var config = NexioConfig()
+            config.protocolClasses = [MockURLProtocol.self]
+            await client.configure(config)
+            await client.addInterceptor(retryInterceptor)
 
-        do {
-            let _: Dummy = try await client.get("https://api.test/secure")
-            Issue.record("Expected .unauthorized")
-        } catch NexioError.unauthorized {
-            // correct — should not retry
-        } catch {
-            Issue.record("Unexpected error: \(error)")
+            do {
+                let _: Dummy = try await client.get("https://api.test/secure")
+                Issue.record("Expected .unauthorized")
+            } catch NexioError.unauthorized {
+                // correct — should not retry
+            } catch {
+                Issue.record("Unexpected error: \(error)")
+            }
         }
     }
 
@@ -86,7 +93,7 @@ struct RetryTests {
             (NexioError.serverError(statusCode: 500, data: Data()), true),
             (NexioError.serverError(statusCode: 503, data: Data()), true),
             (NexioError.serverError(statusCode: 400, data: Data()), false),
-            (NexioError.unauthorized(HTTPURLResponse()), false)
+            (NexioError.unauthorized(.test401()), false)
         ]
     )
     func retryableErrors(error: NexioError, shouldRetry: Bool) async {
@@ -98,19 +105,12 @@ struct RetryTests {
 
 // MARK: - Helpers
 
-/// Counts URL protocol invocations (unused stub for illustrative purposes).
-private final class CountingProtocol: URLProtocol {
-    let onStart: () -> Void
-    init(_ onStart: @escaping () -> Void) { self.onStart = onStart; super.init() }
-    override class func canInit(with request: URLRequest) -> Bool { false }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-    override func startLoading() { onStart() }
-    override func stopLoading() {}
-}
-
-// Extend HTTPURLResponse for convenience in test arguments
+// Extend HTTPURLResponse for convenience in test arguments.
+//
+// A `convenience init()` here would collide with NSObject's implicit
+// Objective-C `init` selector — use a static factory instead.
 extension HTTPURLResponse {
-    convenience init() {
-        self.init(url: URL(string: "https://test")!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+    static func test401() -> HTTPURLResponse {
+        HTTPURLResponse(url: URL(string: "https://test")!, statusCode: 401, httpVersion: nil, headerFields: nil)!
     }
 }
