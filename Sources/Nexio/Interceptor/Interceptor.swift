@@ -1,3 +1,6 @@
+// Copyright (c) 2026 ANSCoder
+// Licensed under the MIT License. See LICENSE in the project root for details.
+
 import Foundation
 
 /// A hook that can inspect and mutate requests before they are sent,

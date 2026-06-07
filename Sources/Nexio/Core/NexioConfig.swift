@@ -1,3 +1,6 @@
+// Copyright (c) 2026 ANSCoder
+// Licensed under the MIT License. See LICENSE in the project root for details.
+
 import Foundation
 
 /// Configuration for ``NexioClient``.
@@ -51,7 +54,12 @@ public struct NexioConfig: Sendable {
     /// Custom `URLProtocol` classes layered onto the session ahead of the
     /// system defaults — primarily for intercepting traffic in tests (e.g.
     /// stubbing responses with a `URLProtocol` subclass). `nil` by default.
-    public var protocolClasses: [AnyClass]?
+    ///
+    /// - Note: `AnyClass` is not `Sendable`; this property is intentionally
+    ///   exempt because protocol classes are always `NSObject` subclasses
+    ///   whose class objects are global singletons — safe to share across
+    ///   concurrency boundaries as long as callers pass only class literals.
+    public nonisolated(unsafe) var protocolClasses: [AnyClass]?
 
     // MARK: - Init
 
