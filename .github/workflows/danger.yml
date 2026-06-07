@@ -9,6 +9,10 @@ jobs:
     name: Danger Swift
     runs-on: macos-15
     if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+      issues: write
+      statuses: write
 
     steps:
       - uses: actions/checkout@v4

@@ -7,8 +7,10 @@ let danger = Danger()
 
 // Warn on large PRs
 let bigPRThreshold = 400
-if danger.github.pullRequest.additions + danger.github.pullRequest.deletions > bigPRThreshold {
-    warn("PR is large (\(danger.github.pullRequest.additions + danger.github.pullRequest.deletions) lines). Consider splitting.")
+let additions = danger.github.pullRequest.additions ?? 0
+let deletions = danger.github.pullRequest.deletions ?? 0
+if additions + deletions > bigPRThreshold {
+    warn("PR is large (\(additions + deletions) lines). Consider splitting.")
 }
 
 // Require CHANGELOG update for non-trivial PRs
