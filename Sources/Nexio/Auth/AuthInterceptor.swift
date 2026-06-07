@@ -9,7 +9,7 @@ import Foundation
 /// let authInterceptor = AuthInterceptor {
 ///     await TokenStore.shared.currentToken()
 /// }
-/// await Nexio.shared.addInterceptor(authInterceptor)
+/// await NexioClient.shared.addInterceptor(authInterceptor)
 /// ```
 public struct AuthInterceptor: Interceptor {
 

@@ -21,7 +21,7 @@ public enum HTTPMethod: String, Sendable {
 ///     var method: HTTPMethod { .get }
 /// }
 ///
-/// let users: [User] = try await Nexio.shared.request(UsersEndpoint())
+/// let users: [User] = try await NexioClient.shared.request(UsersEndpoint())
 /// ```
 public protocol Endpoint: Sendable {
 

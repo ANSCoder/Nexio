@@ -10,7 +10,7 @@ import Foundation
 /// config.baseURL = URL(string: "https://api.example.com")
 /// config.timeout = 15
 /// config.retry = .standard
-/// await Nexio.shared.configure(config)
+/// await NexioClient.shared.configure(config)
 /// ```
 public struct NexioConfig: Sendable {
 

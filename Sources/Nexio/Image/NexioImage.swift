@@ -75,7 +75,7 @@ public struct NexioImage<Placeholder: View, Failure: View>: View {
         .task(id: url) {
             await loadImage()
         }
-        .accessibilityLabel("Image from \(url)")
+        .accessibilityLabel("Remote image")
     }
 
     // MARK: - Private

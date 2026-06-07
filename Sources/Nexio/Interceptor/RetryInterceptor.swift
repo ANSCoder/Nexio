@@ -73,7 +73,7 @@ public struct RetryPolicy: Sendable {
 /// Respects the configured ``RetryPolicy/backoff`` delay between attempts.
 ///
 /// ```swift
-/// await Nexio.shared.addInterceptor(RetryInterceptor(policy: .standard))
+/// await NexioClient.shared.addInterceptor(RetryInterceptor(policy: .standard))
 /// ```
 public struct RetryInterceptor: Interceptor {
 

@@ -1,50 +1,93 @@
-# Nexio
+<div align="center">
 
 ![Nexio](https://raw.githubusercontent.com/ANSCoder/Nexio/main/Resources/NexioBanner.png)
 
-A lightweight, actor-based Swift networking SDK — typed requests, auth, retry, interceptors, and SwiftUI image loading in one zero-dependency package.
+**Lightweight, actor-based Swift networking SDK**
 
-**Pure Swift 6.2 · Actor-based · Zero dependencies · iOS 16+ · macOS 13+**
+[![Swift](https://img.shields.io/badge/Swift-6.2-orange.svg)](https://swift.org)
+[![Platforms](https://img.shields.io/badge/Platforms-iOS%2016%20·%20macOS%2013%20·%20watchOS%209%20·%20tvOS%2016-blue.svg)](https://developer.apple.com)
+[![SPM](https://img.shields.io/badge/Swift%20Package%20Manager-compatible-brightgreen.svg)](https://swift.org/package-manager)
+[![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
+
+Typed JSON requests · Auth strategies · Retry with backoff · Interceptor pipeline · SwiftUI image loading · Zero dependencies
+
+</div>
 
 ---
 
-## Install
+## Features
+
+- **Actor-based** — `NexioClient` is a Swift actor; zero data-race risk, safe to call from any concurrency context
+- **Typed requests** — `get`, `post`, `put`, `patch`, `delete` return decoded `Decodable` values directly
+- **Type-safe endpoints** — `Endpoint` protocol for grouping request details in reusable structs
+- **Auth strategies** — bearer token, API key, custom headers, or dynamic provider (OAuth refresh)
+- **Interceptor pipeline** — adapt requests and retry failures with full control
+- **Retry with backoff** — none, linear, or exponential backoff; configurable per policy
+- **SwiftUI image loading** — `NexioImage` drop-in for `AsyncImage` with `URLCache`-backed caching and prefetch
+- **Structured errors** — `NexioError` covers network, auth, 4xx/5xx, and decoding failures
+- **Zero dependencies** — pure Swift, built on `URLSession`
+
+---
+
+## Installation
+
+### Swift Package Manager
 
 ```swift
 // Package.swift
-.package(url: "https://github.com/ANSCoder/Nexio", from: "1.0.0")
-
-// Target dependency
-.product(name: "Nexio", package: "Nexio")
+dependencies: [
+    .package(url: "https://github.com/ANSCoder/Nexio", from: "1.0.0")
+],
+targets: [
+    .target(name: "YourApp", dependencies: [
+        .product(name: "Nexio", package: "Nexio")
+    ])
+]
 ```
+
+Or add it in Xcode: **File → Add Package Dependencies**, paste the repo URL.
 
 ---
 
 ## Quick Start
 
-### JSON requests
+### Configure once at app launch
 
 ```swift
-// GET
-let users: [User] = try await Nexio.shared.get("https://api.example.com/users")
-
-// POST
-let newUser = CreateUserRequest(name: "Alice")
-let created: User = try await Nexio.shared.post("https://api.example.com/users", body: newUser)
-
-// Top-level shortcuts
-let users: [User] = try await nexioGet("https://api.example.com/users")
+// AppDelegate / App.init
+var config = NexioConfig()
+config.baseURL    = URL(string: "https://api.example.com")
+config.timeout    = 15
+config.retry      = .standard   // 3 attempts, exponential backoff
+config.logLevel   = .errors
+await NexioClient.shared.configure(config)
+await NexioClient.shared.setAuth(.bearer("your-token"))
 ```
 
-### One-time configuration (app launch)
+### Make typed requests
 
 ```swift
-var config = NexioConfig()
-config.baseURL = URL(string: "https://api.example.com")
-config.timeout = 15
-config.retry = .standard        // 3 attempts, exponential backoff
-config.logLevel = .errors
-await Nexio.shared.configure(config)
+// GET — decodes JSON automatically
+let users: [User] = try await NexioClient.shared.get("/users")
+
+// POST with body
+let body = CreateUserRequest(name: "Alice")
+let created: User = try await NexioClient.shared.post("/users", body: body)
+
+// PUT / PATCH / DELETE
+let updated: User = try await NexioClient.shared.put("/users/42", body: changes)
+try await NexioClient.shared.delete("/users/42")
+
+// Absolute URLs work too (ignores baseURL)
+let user: User = try await NexioClient.shared.get("https://api.example.com/users/1")
+```
+
+### Top-level shortcuts
+
+```swift
+// Shorthand for NexioClient.shared.get / .post
+let users: [User] = try await nexioGet("/users")
+let created: User = try await nexioPost("/users", body: newUser)
 ```
 
 ---
@@ -52,34 +95,57 @@ await Nexio.shared.configure(config)
 ## Authentication
 
 ```swift
-// Bearer token (most common)
-await Nexio.shared.setAuth(.bearer("your-jwt-token"))
+// Static bearer token
+await NexioClient.shared.setAuth(.bearer("jwt-token"))
 
-// API key header
-await Nexio.shared.setAuth(.apiKey(header: "X-Api-Key", value: "secret"))
+// API key in a custom header
+await NexioClient.shared.setAuth(.apiKey(header: "X-Api-Key", value: "secret"))
 
-// Dynamic token (OAuth refresh, etc.)
-let interceptor = AuthInterceptor {
-    await TokenStore.shared.currentToken()  // called before every request
+// Arbitrary headers
+await NexioClient.shared.setAuth(.custom(["X-Tenant-ID": "acme", "X-Version": "2"]))
+
+// Dynamic token — closure called before every request (ideal for OAuth refresh)
+let authInterceptor = AuthInterceptor {
+    await TokenStore.shared.currentToken()   // returns AuthStrategy
 }
-await Nexio.shared.addInterceptor(interceptor)
+await NexioClient.shared.addInterceptor(authInterceptor)
+```
+
+### Per-endpoint auth override
+
+```swift
+struct PublicEndpoint: Endpoint {
+    var baseURL: URL  { URL(string: "https://api.example.com")! }
+    var path: String  { "/status" }
+    var method: HTTPMethod { .get }
+    var auth: AuthStrategy? { .some(.none) }  // skip global auth for this request
+}
 ```
 
 ---
 
 ## Type-Safe Endpoints
 
+Group URL, method, query params, headers, and body in one reusable struct:
+
 ```swift
 struct GetUser: Endpoint {
     let id: Int
-    var baseURL: URL { URL(string: "https://api.example.com")! }
-    var path: String { "/users/\(id)" }
+    var baseURL: URL      { URL(string: "https://api.example.com")! }
+    var path: String      { "/users/\(id)" }
     var method: HTTPMethod { .get }
-    // Override auth for this endpoint only:
-    var auth: AuthStrategy? { .none }
 }
 
-let user: User = try await Nexio.shared.request(GetUser(id: 42))
+struct SearchUsers: Endpoint {
+    let query: String
+    var baseURL: URL      { URL(string: "https://api.example.com")! }
+    var path: String      { "/users/search" }
+    var method: HTTPMethod { .get }
+    var queryItems: [URLQueryItem] { [URLQueryItem(name: "q", value: query)] }
+}
+
+let user: User          = try await NexioClient.shared.request(GetUser(id: 42))
+let results: [User]     = try await NexioClient.shared.request(SearchUsers(query: "alice"))
 ```
 
 ---
@@ -87,22 +153,75 @@ let user: User = try await Nexio.shared.request(GetUser(id: 42))
 ## Retry
 
 ```swift
-// Global retry via config
-config.retry = .standard          // 3 retries, exponential backoff
+// Via config (recommended — applied automatically)
+config.retry = .standard                                   // 3 retries, exponential backoff
+config.retry = RetryPolicy(maxAttempts: 5,
+                           backoff: .linear(seconds: 2))   // custom
 
-// Or add the interceptor directly for more control
-let retry = RetryInterceptor(policy: RetryPolicy(maxAttempts: 5, backoff: .linear(seconds: 2)))
-await Nexio.shared.addInterceptor(retry)
+// Via interceptor (for per-client or programmatic control)
+await NexioClient.shared.addInterceptor(
+    RetryInterceptor(policy: .standard)
+)
 ```
 
-Retried automatically on: `.noInternet`, `.timeout`, and 5xx server errors.
+**Retried automatically on:** `.noInternet`, `.timeout`, and 5xx `serverError`.  
+**Not retried:** 4xx errors (client errors are not transient).
+
+---
+
+## Interceptors
+
+Implement `Interceptor` to hook into every request:
+
+```swift
+struct LoggingInterceptor: Interceptor {
+    func adapt(_ request: URLRequest, for session: URLSession) async throws -> URLRequest {
+        print("→ \(request.httpMethod ?? "") \(request.url?.absoluteString ?? "")")
+        return request
+    }
+    func retry(_ request: URLRequest, dueTo error: NexioError, attempt: Int) async -> Bool {
+        false
+    }
+}
+
+await NexioClient.shared.addInterceptor(LoggingInterceptor())
+```
+
+Interceptors run in **insertion order** during `adapt`, and **reverse order** during `retry`.
+
+---
+
+## Error Handling
+
+All errors are typed as `NexioError`:
+
+```swift
+do {
+    let user: User = try await NexioClient.shared.get("/users/1")
+} catch NexioError.unauthorized {
+    // Redirect to login
+} catch NexioError.notFound {
+    // Show 404 UI
+} catch NexioError.noInternet {
+    // Show offline banner
+} catch NexioError.serverError(let statusCode, let data) {
+    // Handle 5xx
+} catch NexioError.decodingFailed(let underlying, let data) {
+    // Log raw response for debugging
+    print(String(data: data, encoding: .utf8) ?? "")
+} catch NexioError.invalidURL(let string) {
+    // Bad URL at call site
+}
+```
 
 ---
 
 ## Image Loading (SwiftUI)
 
+`NexioImage` is a drop-in replacement for `AsyncImage` with transparent `URLCache` caching (50 MB memory / 200 MB disk by default):
+
 ```swift
-// Drop-in AsyncImage replacement — cached automatically
+// Default — gray placeholder, photo icon on failure
 NexioImage("https://cdn.example.com/photo.jpg")
     .frame(width: 100, height: 100)
     .clipShape(Circle())
@@ -110,48 +229,45 @@ NexioImage("https://cdn.example.com/photo.jpg")
 // Custom placeholder and failure views
 NexioImage(
     "https://cdn.example.com/photo.jpg",
-    placeholder: { ProgressView() },
-    failureImage: { Image(systemName: "person.crop.circle") }
+    placeholder:  { ProgressView() },
+    failureImage: { Image(systemName: "person.crop.circle.fill") }
 )
 
-// Prefetch for smoother scroll performance
-await ImageLoader.shared.prefetch(imageURLs)
+// Prefetch a list for smoother scroll performance
+let urls = items.compactMap { URL(string: $0.imageURL) }
+await ImageLoader.shared.prefetch(urls)
+
+// Clear cache
+await ImageLoader.shared.clearCache()
 ```
 
 ---
 
 ## Concurrency
 
-`NexioClient` is an actor — call it from anywhere, as many times as you like, in parallel. There's no internal request queue or call cap:
+`NexioClient` is a Swift actor — all state mutations are serialized automatically with no extra effort. In-flight network I/O runs concurrently through `URLSession`'s connection pool:
 
 ```swift
-async let users    : [User]    = Nexio.shared.get("/users")
-async let posts    : [Post]    = Nexio.shared.get("/posts")
-async let comments : [Comment] = Nexio.shared.get("/comments")
+// Three requests in flight simultaneously
+async let users:    [User]    = NexioClient.shared.get("/users")
+async let posts:    [Post]    = NexioClient.shared.get("/posts")
+async let comments: [Comment] = NexioClient.shared.get("/comments")
 
-let (u, p, c) = try await (users, posts, comments)   // all three in flight together
+let (u, p, c) = try await (users, posts, comments)
 ```
 
-Each call suspends on its network round-trip and releases the actor, so in-flight requests run their wire I/O concurrently through `URLSession`'s own connection pool — actor isolation only ever serializes the microsecond-scale bookkeeping (building the request, applying auth/headers, encoding/decoding JSON), never the network wait.
-
-The practical ceiling on *simultaneous* requests comes from the OS network stack, not Nexio: `URLSessionConfiguration.httpMaximumConnectionsPerHost` (a handful of TCP connections per host on HTTP/1.1; HTTP/2 multiplexes far more requests over fewer connections). That's the same limit every `URLSession`-based client — Alamofire included — runs into; Nexio doesn't add one of its own.
+Actor isolation serializes only the microsecond-scale bookkeeping (building requests, applying headers, decoding JSON). Network round-trips never block other callers.
 
 ---
 
-## Error Handling
+## Testing
+
+Inject a custom `URLProtocol` subclass via `NexioConfig.protocolClasses` to stub responses without hitting the network:
 
 ```swift
-do {
-    let user: User = try await Nexio.shared.get("/users/1")
-} catch NexioError.unauthorized {
-    // redirect to login
-} catch NexioError.noInternet {
-    // show offline banner
-} catch NexioError.decodingFailed(let underlying, let data) {
-    // log decoding error + raw response
-} catch {
-    // NexioError.unknown
-}
+var config = NexioConfig()
+config.protocolClasses = [MockURLProtocol.self]
+await client.configure(config)
 ```
 
 ---
@@ -165,10 +281,10 @@ do {
 | watchOS  | 9.0     |
 | tvOS     | 16.0    |
 
-Swift 6.2+, zero external dependencies.
+**Swift 6.2+** · Zero external dependencies
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Nexio is released under the MIT license. See [LICENSE](LICENSE) for details.

@@ -4,7 +4,7 @@
 /// ``Endpoint/auth`` on individual endpoints to override per-request.
 ///
 /// ```swift
-/// await Nexio.shared.setAuth(.bearer("my-token"))
+/// await NexioClient.shared.setAuth(.bearer("my-token"))
 /// ```
 public enum AuthStrategy: Sendable {
 

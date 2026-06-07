@@ -30,6 +30,7 @@ public actor NexioClient {
     private var interceptors: [any Interceptor] = []
     private var session: URLSession = URLSession.shared
     private let decoder: JSONDecoder = JSONDecoder()
+    private let encoder: JSONEncoder = JSONEncoder()
 
     // MARK: - Init
 
@@ -50,6 +51,12 @@ public actor NexioClient {
             sessionConfig.protocolClasses = protocolClasses + (sessionConfig.protocolClasses ?? [])
         }
         session = URLSession(configuration: sessionConfig)
+        // Wire the config's retry policy as the first interceptor so callers
+        // don't have to add RetryInterceptor manually when using NexioConfig.retry.
+        if config.retry.maxAttempts > 0 {
+            interceptors.removeAll { $0 is RetryInterceptor }
+            interceptors.insert(RetryInterceptor(policy: config.retry), at: 0)
+        }
     }
 
     /// Sets the global authentication strategy.
@@ -151,8 +158,9 @@ public actor NexioClient {
         headers: [String: String] = [:]
     ) async throws {
         let request = try buildRequest(url: url, method: .delete, headers: headers, body: nil as String?)
-        let (_, http) = try await executeWithInterceptors(request, attempt: 0)
-        if let error = http.nexioError(data: Data()) {
+        let (data, http) = try await executeWithInterceptors(request, attempt: 0)
+        logIfNeeded(request: request, response: http, data: data)
+        if let error = http.nexioError(data: data) {
             throw error
         }
     }
@@ -163,7 +171,7 @@ public actor NexioClient {
     /// the JSON response.
     ///
     /// ```swift
-    /// let user: User = try await Nexio.shared.request(GetUserEndpoint(id: 42))
+    /// let user: User = try await NexioClient.shared.request(GetUserEndpoint(id: 42))
     /// ```
     ///
     /// - Parameter endpoint: The endpoint to execute.
@@ -210,8 +218,8 @@ public actor NexioClient {
     ///   doesn't match the response shape, or any status-mapped ``NexioError``.
     private func perform<T: Decodable & Sendable>(_ request: URLRequest) async throws -> T {
         let (data, http) = try await executeWithInterceptors(request, attempt: 0)
-        if let error = http.nexioError(data: data) { throw error }
         logIfNeeded(request: request, response: http, data: data)
+        if let error = http.nexioError(data: data) { throw error }
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
@@ -288,7 +296,7 @@ public actor NexioClient {
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
         applyAuth(authStrategy, to: &request)
         if let body {
-            request.httpBody = try JSONEncoder().encode(body)
+            request.httpBody = try encoder.encode(body)
         }
         return request
     }
@@ -325,7 +333,7 @@ public actor NexioClient {
         applyAuth(effectiveAuth, to: &request)
 
         if let body = endpoint.body {
-            request.httpBody = try JSONEncoder().encode(body)
+            request.httpBody = try encoder.encode(body)
         }
         return request
     }

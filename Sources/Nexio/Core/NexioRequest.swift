@@ -7,7 +7,7 @@ import Foundation
 /// ```swift
 /// let handle = NexioRequest()
 /// Task {
-///     let users: [User] = try await Nexio.shared.get("/users", requestHandle: handle)
+///     let users: [User] = try await NexioClient.shared.get("/users", requestHandle: handle)
 /// }
 /// // Later:
 /// handle.cancel()
