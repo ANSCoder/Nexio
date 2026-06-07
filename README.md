@@ -8,6 +8,10 @@
 [![Platforms](https://img.shields.io/badge/Platforms-iOS%2016%20·%20macOS%2013%20·%20watchOS%209%20·%20tvOS%2016-blue.svg)](https://developer.apple.com)
 [![SPM](https://img.shields.io/badge/Swift%20Package%20Manager-compatible-brightgreen.svg)](https://swift.org/package-manager)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
+[![CI](https://github.com/ANSCoder/Nexio/actions/workflows/ci.yml/badge.svg)](https://github.com/ANSCoder/Nexio/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/ANSCoder/Nexio/branch/main/graph/badge.svg)](https://codecov.io/gh/ANSCoder/Nexio)
+[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FANSCoder%2FNexio%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/ANSCoder/Nexio)
+[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FANSCoder%2FNexio%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/ANSCoder/Nexio)
 
 Typed JSON requests · Auth strategies · Retry with backoff · Interceptor pipeline · SwiftUI image loading · Zero dependencies
 

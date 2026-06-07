@@ -52,8 +52,24 @@ jobs:
       - name: Build
         run: swift build -c release
 
-      - name: Test
-        run: swift test
+      - name: Test with coverage
+        run: swift test --enable-code-coverage
+
+      - name: Generate coverage report
+        run: |
+          xcrun llvm-cov export \
+            .build/debug/NexioPackageTests.xctest/Contents/MacOS/NexioPackageTests \
+            -instr-profile .build/debug/codecov/default.profdata \
+            -ignore-filename-regex ".build|Tests" \
+            -format lcov > coverage.lcov
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.lcov
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # ── Swift 6 strict concurrency ────────────────────────────────────────────
   swift6:
