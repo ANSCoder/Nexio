@@ -1,21 +1,19 @@
 ---
 name: Feature request
-about: Suggest an improvement or new capability
+about: Propose a new feature or API change
 labels: enhancement
 ---
 
-**Problem**
-Describe the problem this feature would solve.
+**Problem / motivation**
+What problem does this solve? What use case does it unlock?
 
-**Proposed solution**
-How you'd like the feature to work, ideally with a code example.
-
+**Proposed API**
 ```swift
-// example API
+// How would you use this feature?
 ```
 
 **Alternatives considered**
-Any alternative approaches you've considered.
+Any workarounds or alternative designs you've considered.
 
 **Additional context**
-Any other context or screenshots.
+Links, prior art, related issues.
