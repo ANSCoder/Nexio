@@ -65,9 +65,24 @@ jobs:
 
       - name: Generate coverage report
         run: |
+          set -euo pipefail
+          test_binary=$(find .build -type f \
+            -path '*/NexioTests.xctest/Contents/MacOS/NexioTests' \
+            -print -quit)
+          profile=$(find .build -type f \
+            -path '*/codecov/default.profdata' \
+            -print -quit)
+          if [ -z "$test_binary" ]; then
+            echo "Could not find the NexioTests executable under .build." >&2
+            exit 1
+          fi
+          if [ -z "$profile" ]; then
+            echo "Could not find the Swift code coverage profile under .build." >&2
+            exit 1
+          fi
           xcrun llvm-cov export \
-            .build/debug/NexioPackageTests.xctest/Contents/MacOS/NexioPackageTests \
-            -instr-profile .build/debug/codecov/default.profdata \
+            "$test_binary" \
+            -instr-profile "$profile" \
             -ignore-filename-regex ".build|Tests" \
             -format lcov > coverage.lcov
           test -s coverage.lcov   # fail if the export produced nothing
