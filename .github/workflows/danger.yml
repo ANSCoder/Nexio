@@ -21,7 +21,9 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_16.3.app
 
       - name: Install Danger Swift
-        run: brew install danger/tap/danger-swift
+        run: |
+          brew trust danger/tap
+          brew install danger/tap/danger-swift
 
       - name: Run Danger
         run: danger-swift ci

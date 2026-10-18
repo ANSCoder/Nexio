@@ -45,6 +45,12 @@ docs/short-description
 - [ ] `CHANGELOG.md` updated under `[Unreleased]`
 - [ ] PR description explains *what* changed and *why*
 
+## Automated PR reviews
+
+This repository can run [PR-Agent](https://github.com/The-PR-Agent/pr-agent) on pull requests targeting `main`. To enable reviews, add an `OPENAI_KEY` repository secret under **Settings → Secrets and variables → Actions**. PR-Agent reviews newly opened and updated pull requests and posts its feedback to the PR. The workflow skips reviews when the secret is not configured and cannot access repository secrets for pull requests from forks.
+
+PR-Agent sends pull request content to the configured model provider. Model API usage may incur charges; review the provider's data and pricing terms before enabling it. The workflow requests only read access to repository contents and write access to pull requests and issues so it can post review feedback.
+
 ## Reporting Issues
 
 Use GitHub Issues. For security vulnerabilities, see [SECURITY.md](SECURITY.md).
