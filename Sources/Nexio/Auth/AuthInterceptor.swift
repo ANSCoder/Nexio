@@ -8,6 +8,10 @@ import Foundation
 /// Use this when your token can change over time (e.g. OAuth refresh).
 /// For static tokens, prefer ``NexioClient/setAuth(_:)`` instead.
 ///
+/// The provider runs before each request that doesn't set its own
+/// ``Endpoint/auth``. A request sent from inside the provider, such as a token
+/// refresh call, skips this interceptor, so it can't recurse into itself.
+///
 /// ```swift
 /// let authInterceptor = AuthInterceptor {
 ///     await TokenStore.shared.currentToken()
@@ -29,7 +33,9 @@ public struct AuthInterceptor: Interceptor {
 
     public func adapt(_ request: URLRequest, for session: URLSession) async throws -> URLRequest {
         var mutableRequest = request
-        let strategy = await provider()
+        let strategy = await AuthResolution.$isResolving.withValue(true) {
+            await provider()
+        }
         switch strategy {
         case .bearer(let token):
             mutableRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -50,4 +56,14 @@ public struct AuthInterceptor: Interceptor {
     ) async -> Bool {
         false // Auth interceptor does not handle retries
     }
+}
+
+// MARK: - AuthResolution
+
+/// Marks the span during which an ``AuthInterceptor`` provider is running.
+///
+/// Requests made inside that span are not given the dynamic token again.
+/// This is what stops a refresh call from recursing into the same provider.
+enum AuthResolution {
+    @TaskLocal static var isResolving: Bool = false
 }

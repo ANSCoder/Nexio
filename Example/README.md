@@ -46,7 +46,7 @@ AppModule/
 
 Two SDK gaps were worked around here rather than papered over silently:
 
-- **`config.retry` is inert** (`NexioConfig.retry` is stored but never wired to a `RetryInterceptor`) — `ContentView.configureNexio()` registers `RetryInterceptor(policy: .standard)` explicitly, with a `// NOTE:` comment explaining why.
+- **`config.retry`** is applied by the built-in request pipeline. `ContentView.configureNexio()` registers `RetryInterceptor(policy: .standard)` explicitly to demonstrate custom retry callbacks.
 - **`Endpoint.auth: AuthStrategy?` `.none` ambiguity** (`.none` resolves to `Optional.none`/"inherit", not `AuthStrategy.none`/"skip") — `EndpointAuthOverrideEndpoint` uses `.apiKey(...)` instead, with a doc comment spelling out the footgun and the `.some(.none)` workaround.
 
 `Support/Interceptors.swift` also shows the Swift 6–correct way to hand data from a `Sendable` `Interceptor` back to `@MainActor` view models (actor-backed stores) — the SDK's own `AuthTests.CapturingInterceptor` gets this wrong and fails to compile under strict concurrency.

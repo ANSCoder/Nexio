@@ -33,6 +33,84 @@ Typed JSON requests · Auth strategies · Retry with backoff · Interceptor pipe
 
 ---
 
+## Release versioning
+
+The next release for the changes in this branch should be tagged **2.0.0**. The public Swift signatures remain source-compatible, but request behavior changes in ways applications can observe: configured retries now include HTTP 429/5xx responses and can be disabled on reconfiguration, built-in retry policies limit retries to idempotent methods, endpoint auth overrides take precedence, and cancellation uses `CancellationError`. These changes can affect request counts, credentials, and error handling, so a major release is the safer compatibility signal than 1.1.0.
+
+---
+
+## Architecture
+
+Nexio is split into a few layers. `NexioClient` is the only actor that owns request state, and it never blocks on I/O or decoding.
+
+### Module map
+
+```mermaid
+flowchart LR
+    Core["Core<br/>NexioClient, NexioConfig, Endpoint"] --> Interceptor["Interceptor<br/>Interceptor, RetryInterceptor"]
+    Core --> Auth["Auth<br/>AuthStrategy, AuthInterceptor"]
+    Core --> Errors["Errors<br/>NexioError"]
+    Core --> Internal["Internal<br/>URLSession and HTTP helpers"]
+    Image["Image<br/>ImageLoader, NexioImage"] --> Internal
+    Auth --> Interceptor
+```
+
+### Request pipeline
+
+Every request goes through the same loop. Retries re-enter it from the top, so each attempt gets fresh adaptation, including a fresh token.
+
+```mermaid
+flowchart TD
+    App["App code<br/>get, post, request(endpoint)"] --> Build["Build URLRequest<br/>baseURL, headers, auth"]
+    Build --> Adapt["Adapt<br/>interceptors in order<br/>AuthInterceptor skipped when endpoint sets auth"]
+    Adapt --> Send["URLSession.data(for:)"]
+    Send --> Status{"Transport error<br/>or 429 / 5xx?"}
+    Status -- "no, 2xx or 4xx" --> Decode["Decode JSON<br/>off the actor"]
+    Status -- "yes" --> Retry{"Built-in retry allowed?<br/>idempotent, retryable,<br/>under attempt limit"}
+    Retry -- "yes, after backoff" --> Adapt
+    Retry -- "no" --> Throw["Throw NexioError<br/>or CancellationError"]
+    Decode --> Done["Return value"]
+    Throw --> App
+    Done --> App
+```
+
+### Token refresh without recursion
+
+`AuthInterceptor` calls your provider before each request. If the provider itself calls Nexio to refresh the token, that refresh request skips the dynamic auth interceptor, so it can't loop back into the same provider.
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Client as NexioClient
+    participant Provider as AuthInterceptor provider
+    participant Net as URLSession
+    App->>Client: get("/orders")
+    Client->>Provider: adapt
+    Provider->>Client: post("/auth/refresh")
+    Note right of Client: AuthInterceptor skipped for this call
+    Client->>Net: refresh request
+    Net-->>Client: new token
+    Client-->>Provider: new token
+    Provider-->>Client: Bearer new token
+    Client->>Net: GET /orders
+    Net-->>Client: 200 JSON
+    Client-->>App: decoded orders
+```
+
+### Rules the design guarantees
+
+| Rule | Why |
+|------|-----|
+| Actor holds only state and bookkeeping | I/O and JSON decoding run outside it, so one large response never queues other requests. |
+| Built-in retry policies retry only idempotent methods (GET, HEAD, PUT, DELETE, OPTIONS) | POST and PATCH could duplicate work on the server. Custom interceptors can define other behavior. |
+| Built-in retry covers network errors, timeouts, 429, and 5xx | These are transient. Other 4xx responses are final. |
+| Hard limit of 10 retries per request | A custom interceptor that always returns `true` can't loop forever. |
+| Endpoint `auth` overrides the dynamic token | A public endpoint sends no token, and a per-endpoint token is never overwritten. |
+| Cancellation stops retries and throws `CancellationError` | Cancelled work stops quickly and doesn't show up as a failure. |
+| Reconfiguring replaces the old session and retry policy | No leaked `URLSession`, and retry can be turned off. |
+
+---
+
 ## Installation
 
 ### Swift Package Manager
@@ -62,7 +140,7 @@ Or add it in Xcode: **File → Add Package Dependencies**, paste the repo URL.
 var config = NexioConfig()
 config.baseURL    = URL(string: "https://api.example.com")
 config.timeout    = 15
-config.retry      = .standard   // 3 attempts, exponential backoff
+config.retry      = .standard   // 3 retries (up to 4 requests), exponential backoff
 config.logLevel   = .errors
 await NexioClient.shared.configure(config)
 await NexioClient.shared.setAuth(.bearer("your-token"))
@@ -122,9 +200,11 @@ struct PublicEndpoint: Endpoint {
     var baseURL: URL  { URL(string: "https://api.example.com")! }
     var path: String  { "/status" }
     var method: HTTPMethod { .get }
-    var auth: AuthStrategy? { .some(.none) }  // skip global auth for this request
+    var auth: AuthStrategy? { .some(.none) }  // no token, and no AuthInterceptor
 }
 ```
+
+`auth` has three cases. `nil` inherits the global auth and runs any `AuthInterceptor`. `.some(.none)` removes common credential headers and disables cookie handling. Do not add custom credentials through `headers`. `.some(strategy)` uses that strategy and skips `AuthInterceptor`, so the dynamic token never overwrites it.
 
 ---
 
@@ -157,19 +237,23 @@ let results: [User]     = try await NexioClient.shared.request(SearchUsers(query
 ## Retry
 
 ```swift
-// Via config (recommended — applied automatically)
+// Via config (recommended): applies to every request
 config.retry = .standard                                   // 3 retries, exponential backoff
 config.retry = RetryPolicy(maxAttempts: 5,
                            backoff: .linear(seconds: 2))   // custom
 
-// Via interceptor (for per-client or programmatic control)
+// Via interceptor: for composing with your own interceptors
 await NexioClient.shared.addInterceptor(
     RetryInterceptor(policy: .standard)
 )
 ```
 
-**Retried automatically on:** `.noInternet`, `.timeout`, and 5xx `serverError`.  
-**Not retried:** 4xx errors (client errors are not transient).
+`maxAttempts` is the number of retries, in addition to the initial request. The standard policy can therefore send up to 4 requests total. If both config retry and retry interceptors are registered, the config policy gets first chance and the interceptor callbacks are consulted only when it declines; both share the same attempt counter.
+
+**Retried on:** `.noInternet`, `.timeout`, HTTP 429, and HTTP 5xx.
+**Built-in retry policies retry only idempotent methods:** GET, HEAD, PUT, DELETE, OPTIONS. A custom `Interceptor.retry` can define different behavior.
+**Never retried by default:** POST and PATCH, and any 4xx other than 429.
+**Limits:** backoff is capped at 60 seconds, and a request is retried at most 10 times.
 
 ---
 
@@ -260,7 +344,17 @@ async let comments: [Comment] = NexioClient.shared.get("/comments")
 let (u, p, c) = try await (users, posts, comments)
 ```
 
-Actor isolation serializes only the microsecond-scale bookkeeping (building requests, applying headers, decoding JSON). Network round-trips never block other callers.
+Actor isolation covers only the short bookkeeping steps: building requests and applying headers. Network round-trips and JSON decoding run outside the actor, so a large response never blocks other callers.
+
+Cancelling the task that awaits a request stops retries and the network call, and the await throws `CancellationError`:
+
+```swift
+let task = Task {
+    let posts: [Post] = try await NexioClient.shared.get("/feed")
+    return posts
+}
+task.cancel()   // stops retries and the network call
+```
 
 ---
 

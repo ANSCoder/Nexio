@@ -48,9 +48,13 @@ public protocol Endpoint: Sendable {
 
     /// Per-request auth override.
     ///
-    /// - `nil` — inherit the global ``AuthStrategy`` set on ``NexioClient``.
-    /// - `.none` — skip auth entirely for this request.
-    /// - Any other value — use it instead of the global strategy.
+    /// - `nil`: inherit the global ``AuthStrategy`` set on ``NexioClient``, and
+    ///   apply any registered ``AuthInterceptor``.
+    /// - `.some(.none)`: skip Nexio-managed auth for this request, remove common
+    ///   credential headers, and disable cookie handling. No ``AuthInterceptor``
+    ///   runs. Custom credential headers should not be added through `headers`.
+    /// - `.some(strategy)`: use this strategy instead. No ``AuthInterceptor``
+    ///   runs, so the dynamic token can't overwrite it.
     var auth: AuthStrategy? { get }
 }
 
