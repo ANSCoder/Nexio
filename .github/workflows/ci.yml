@@ -14,40 +14,48 @@ jobs:
   # ── iOS ────────────────────────────────────────────────────────────────────
   ios:
     name: iOS ${{ matrix.ios }} / Xcode ${{ matrix.xcode }}
-    runs-on: macos-15
+    runs-on: xcode-27
+    timeout-minutes: 30
     strategy:
       matrix:
         include:
-          - xcode: "16.3"
-            ios: "18.3"
-            simulator: "iPhone 16"
+          - xcode: "27.1"
+            ios: "27.0"
+            simulator: "iPhone 18 Pro"
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Select Xcode ${{ matrix.xcode }}
-        run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
+        run: |
+          sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
+          xcodebuild -version
 
       - name: Build & Test (iOS)
+        # pipefail is not set by default, so a failing test would be hidden by a pipe.
+        # xcpretty is dropped for the same reason: a missing tool fails the job.
         run: |
+          set -o pipefail
           xcodebuild test \
             -scheme Nexio \
             -destination "platform=iOS Simulator,name=${{ matrix.simulator }},OS=${{ matrix.ios }}" \
             -enableCodeCoverage YES \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            | xcpretty
+            CODE_SIGNING_REQUIRED=NO
 
   # ── macOS ──────────────────────────────────────────────────────────────────
   macos:
     name: macOS / Swift Package
-    runs-on: macos-15
+    runs-on: xcode-27
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode 16.3
-        run: sudo xcode-select -s /Applications/Xcode_16.3.app
+      - name: Select Xcode 27.1
+        run: |
+          sudo xcode-select -s /Applications/Xcode_27.1.app
+          xcodebuild -version
 
       - name: Build
         run: swift build -c release
@@ -62,28 +70,32 @@ jobs:
             -instr-profile .build/debug/codecov/default.profdata \
             -ignore-filename-regex ".build|Tests" \
             -format lcov > coverage.lcov
+          test -s coverage.lcov   # fail if the export produced nothing
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.lcov
           fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # ── Swift 6 strict concurrency ────────────────────────────────────────────
   swift6:
     name: Swift 6 strict concurrency check
-    runs-on: macos-15
+    runs-on: xcode-27
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode 16.3
-        run: sudo xcode-select -s /Applications/Xcode_16.3.app
-
-      - name: Build with strict concurrency
+      - name: Select Xcode 27.1
         run: |
-          swift build \
+          sudo xcode-select -s /Applications/Xcode_27.1.app
+          xcodebuild -version
+
+      - name: Build library and tests with strict concurrency
+        # --build-tests compiles the test target too, so concurrency errors in tests fail CI.
+        run: |
+          swift build --build-tests \
             -Xswiftc -strict-concurrency=complete \
             -Xswiftc -warnings-as-errors
