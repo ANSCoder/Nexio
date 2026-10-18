@@ -91,8 +91,14 @@ public struct NexioImage<Placeholder: View, Failure: View>: View {
         }
         do {
             let image = try await loader.load(imageURL)
+            guard !Task.isCancelled else { return }
             phase = .loaded(image)
+        } catch is CancellationError {
+            // The view moved on to another URL or disappeared. Leave the phase
+            // alone, so a cancelled load never shows the failure image.
+            return
         } catch {
+            guard !Task.isCancelled else { return }
             phase = .failed
         }
     }

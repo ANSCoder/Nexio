@@ -7,7 +7,7 @@ on:
 jobs:
   danger:
     name: Danger Swift
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     permissions:
       pull-requests: write
@@ -17,13 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode 16.3
-        run: sudo xcode-select -s /Applications/Xcode_16.3.app
-
-      - name: Install Danger Swift
-        run: brew install danger/tap/danger-swift
-
       - name: Run Danger
-        run: danger-swift ci
+        uses: danger/swift@fcb64d7a1bbdb1f3f6ab28a5b48eda751a29f04b # Node 24 fix
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

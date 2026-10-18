@@ -43,8 +43,8 @@ struct ContentView: View {
         config.logLevel = .all
         await NexioClient.shared.configure(config)
 
-        // NOTE: setting `config.retry` alone does not enable retries yet —
-        // register the interceptor explicitly to see retry behaviour in action.
+        // Register the interceptor explicitly here to demonstrate custom retry
+        // callbacks. The built-in config.retry policy also works independently.
         await NexioClient.shared.addInterceptor(RetryInterceptor(policy: .standard))
         await NexioClient.shared.addInterceptor(ConsoleLogInterceptor())
         await NexioClient.shared.addInterceptor(HeaderCaptureInterceptor())

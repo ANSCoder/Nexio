@@ -18,6 +18,12 @@ public typealias PlatformImage = NSImage
 extension NSImage: @retroactive @unchecked Sendable {}
 #endif
 
+/// Carries a decoded image out of a detached task. Images are decoded once and
+/// never mutated afterwards, so sharing the reference is safe.
+private struct DecodedImage: @unchecked Sendable {
+    let image: PlatformImage
+}
+
 // MARK: - ImageLoader
 
 /// An actor that fetches and caches platform images.
@@ -34,6 +40,11 @@ public actor ImageLoader {
 
     /// Shared instance used by ``NexioImage``.
     public static let shared = ImageLoader()
+
+    // MARK: - Constants
+
+    /// Maximum number of images fetched at once by ``prefetch(_:)``.
+    private static let prefetchConcurrency = 4
 
     // MARK: - Private State
 
@@ -77,13 +88,17 @@ public actor ImageLoader {
         if let httpError = response.nexioError(data: data) {
             throw httpError
         }
-        guard let image = PlatformImage(data: data) else {
+        try Task.checkCancellation()
+        // Decoding is CPU work. decodeImage is nonisolated, so it runs off the actor.
+        let decoded = await Self.decodeImage(data)
+        try Task.checkCancellation()
+        guard let decoded else {
             throw NexioError.decodingFailed(
                 underlying: ImageDecodingError.invalidImageData,
                 data: data
             )
         }
-        return image
+        return decoded.image
     }
 
     /// Prefetches images in the background, populating the `URLCache`.
@@ -93,14 +108,24 @@ public actor ImageLoader {
     /// - Parameter urls: URLs to warm up in the cache.
     public func prefetch(_ urls: [URL]) async {
         await withTaskGroup(of: Void.self) { group in
-            for url in urls {
-                // No [weak self] — structured concurrency keeps the actor alive
-                // for the lifetime of the task group.
-                group.addTask {
-                    _ = try? await self.load(url)
+            var remaining = urls.makeIterator()
+            // Keep at most `prefetchConcurrency` downloads in flight.
+            for _ in 0..<min(Self.prefetchConcurrency, urls.count) {
+                if let url = remaining.next() {
+                    group.addTask { _ = try? await self.load(url) }
+                }
+            }
+            while await group.next() != nil {
+                if let url = remaining.next() {
+                    group.addTask { _ = try? await self.load(url) }
                 }
             }
         }
+    }
+
+    /// Decodes image bytes. Nonisolated, so it runs off the actor.
+    private static func decodeImage(_ data: Data) async -> DecodedImage? {
+        PlatformImage(data: data).map { DecodedImage(image: $0) }
     }
 
     /// Removes all cached images from memory and disk.

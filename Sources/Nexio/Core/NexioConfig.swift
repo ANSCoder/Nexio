@@ -23,9 +23,9 @@ public struct NexioConfig: Sendable {
     public enum LogLevel: Sendable {
         /// No logging.
         case none
-        /// Logs only errors and non-2xx responses.
+        /// Logs failed request methods, sanitized URLs, and response status codes.
         case errors
-        /// Logs every request and response, including headers and bodies.
+        /// Logs every request method, sanitized URL, response status, and byte count.
         case all
     }
 
@@ -40,12 +40,20 @@ public struct NexioConfig: Sendable {
 
     /// Headers added to every request. Individual requests can override or
     /// extend these by passing their own `headers` dictionary.
+    ///
+    /// Don't put credentials here. Use ``AuthStrategy`` instead. An explicit
+    /// no-auth endpoint removes common credential headers from these defaults,
+    /// but custom credential header names are not detected.
     public var defaultHeaders: [String: String] = [
         "Content-Type": "application/json",
         "Accept": "application/json"
     ]
 
     /// Global retry policy. Defaults to ``RetryPolicy/none``.
+    ///
+    /// Applies to every request. Only idempotent methods are retried, so POST
+    /// and PATCH are never retried by default. Retries stop after a hard limit
+    /// of 10 retries per request.
     public var retry: RetryPolicy = .none
 
     /// Console log verbosity. Defaults to ``LogLevel/none``.

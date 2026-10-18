@@ -13,18 +13,20 @@ if additions + deletions > bigPRThreshold {
     warn("PR is large (\(additions + deletions) lines). Consider splitting.")
 }
 
-// Require CHANGELOG update for non-trivial PRs
+// Require CHANGELOG update for non-trivial PRs.
+// Trivial means the title starts with a listed prefix, not that it contains one.
+let title = danger.github.pullRequest.title
+let trivialPrefixes = ["[trivial]", "docs:", "chore:"]
+let isTrivial = trivialPrefixes.contains { title.hasPrefix($0) }
+
 let hasChangelogUpdate = danger.git.modifiedFiles.contains("CHANGELOG.md")
     || danger.git.createdFiles.contains("CHANGELOG.md")
-let isTrivial = danger.github.pullRequest.title.contains("[trivial]")
-    || danger.github.pullRequest.title.contains("docs:")
-    || danger.github.pullRequest.title.contains("chore:")
 if !hasChangelogUpdate && !isTrivial {
     warn("No `CHANGELOG.md` update. Add an entry under `[Unreleased]` or prefix title with `chore:`/`docs:` to skip.")
 }
 
 // Require PR description
-let bodyLength = danger.github.pullRequest.body?.count ?? 0
+let bodyLength = danger.github.pullRequest.body?.trimmingCharacters(in: .whitespacesAndNewlines).count ?? 0
 if bodyLength < 20 {
     fail("PR description is too short. Explain what changed and why.")
 }

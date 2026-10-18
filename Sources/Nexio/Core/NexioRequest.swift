@@ -5,15 +5,18 @@ import Foundation
 
 /// A handle to an in-flight Nexio request.
 ///
-/// Retain the handle if you need to cancel the request before it completes.
+/// - Note: No public Nexio API currently returns a `NexioRequest`. To cancel a
+///   request, cancel the `Task` that awaits it. Cancelling the task stops
+///   retries and the underlying network call, and the await throws
+///   `CancellationError`.
 ///
 /// ```swift
-/// let handle = NexioRequest()
-/// Task {
-///     let users: [User] = try await NexioClient.shared.get("/users", requestHandle: handle)
+/// let task = Task {
+///     let users: [User] = try await NexioClient.shared.get("/users")
+///     return users
 /// }
 /// // Later:
-/// handle.cancel()
+/// task.cancel()
 /// ```
 public final class NexioRequest: Sendable {
 

@@ -34,6 +34,12 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     /// Set this before each test. Nil causes a connection error.
     nonisolated(unsafe) static var responseStub: Response?
 
+    /// Number of requests that reached the mock. Reset it at the start of each test.
+    nonisolated(unsafe) static var requestCount = 0
+
+    /// The most recent request that reached the mock, for header assertions.
+    nonisolated(unsafe) static var lastRequest: URLRequest?
+
     // MARK: - Helpers
 
     /// Stubs a JSON response from an `Encodable` value.
@@ -71,6 +77,8 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        MockURLProtocol.requestCount += 1
+        MockURLProtocol.lastRequest = request
         guard let stub = MockURLProtocol.responseStub else {
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return

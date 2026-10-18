@@ -1,0 +1,46 @@
+name: PR Agent
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: pr-agent-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: AI pull request review
+    runs-on: ubuntu-latest
+    if: github.event.sender.type != 'Bot'
+    steps:
+      - name: Check for the model API key
+        id: api-key
+        env:
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+        run: |
+          if [ -n "$OPENAI_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "PR-Agent skipped: configure the OPENAI_KEY Actions secret to enable reviews."
+          fi
+
+      - name: Review pull request with PR-Agent
+        if: steps.api-key.outputs.configured == 'true'
+        uses: the-pr-agent/pr-agent@v0.47.0
+        env:
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github_action_config.auto_review: "true"
+          github_action_config.auto_describe: "false"
+          github_action_config.auto_improve: "false"
+          github_action_config.pr_actions: '["opened", "reopened", "ready_for_review"]'
+          github_action_config.handle_push_trigger: "true"
+          github_action_config.push_commands: '["/review"]'
