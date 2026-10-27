@@ -50,15 +50,16 @@ struct RequestBuildingTests {
         }
     }
 
-    @Test("Query with a raw space throws invalidURL instead of trapping")
-    func invalidQueryThrows() async throws {
+    @Test("Query with a raw space is percent-encoded, not sent unencoded")
+    func rawSpaceInQueryIsEncoded() async throws {
         try await mockingNetwork {
+            // Set the stub explicitly: a leftover stub from another test must not decide the outcome.
+            MockURLProtocol.stub(json: "{}")
             let recorder = Recorder()
             let client = await makeClient(recorder: recorder)
 
-            await #expect(throws: NexioError.self) {
-                let _: Empty = try await client.get("users?q=a b")
-            }
+            let _: Empty = try await client.get("users?q=a b")
+            #expect(await recorder.last?.url?.absoluteString == "https://api.test/users?q=a%20b")
         }
     }
 }
