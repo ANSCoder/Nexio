@@ -17,7 +17,8 @@ let package = Package(
         .target(
             name: "Nexio",
             swiftSettings: [
-                .enableExperimentalFeature("StrictConcurrency")
+                .enableUpcomingFeature("ExistentialAny"),
+                .enableUpcomingFeature("MemberImportVisibility")
             ]
         ),
         .testTarget(

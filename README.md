@@ -4,7 +4,7 @@
 
 **Lightweight, actor-based Swift networking SDK**
 
-[![Swift](https://img.shields.io/badge/Swift-6.2-orange.svg)](https://swift.org)
+[![Swift](https://img.shields.io/badge/Swift-6.0%2B-orange.svg)](https://swift.org)
 [![Platforms](https://img.shields.io/badge/Platforms-iOS%2016%20·%20macOS%2013%20·%20watchOS%209%20·%20tvOS%2016-blue.svg)](https://developer.apple.com)
 [![SPM](https://img.shields.io/badge/Swift%20Package%20Manager-compatible-brightgreen.svg)](https://swift.org/package-manager)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
@@ -379,7 +379,7 @@ await client.configure(config)
 | watchOS  | 9.0     |
 | tvOS     | 16.0    |
 
-**Swift 6.2+** · Zero external dependencies
+**Swift 6.0+** · Zero external dependencies
 
 ---
 

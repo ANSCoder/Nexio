@@ -2,8 +2,11 @@
 // Licensed under the MIT License. See LICENSE in the project root for details.
 
 import Foundation
+import os
 
 // MARK: - NexioClient
+
+private let logger = Logger(subsystem: "com.nexio", category: "network")
 
 /// The main entry point for Nexio networking.
 ///
@@ -509,10 +512,9 @@ public actor NexioClient {
             break
         case .errors:
             guard !response.isSuccess else { return }
-            print("[Nexio] ❌ \(request.httpMethod ?? "?") \(URLRedactor.redacted(request.url)) → \(response.statusCode)")
+            logger.error("\(request.httpMethod ?? "?") \(URLRedactor.redacted(request.url)) -> \(response.statusCode)")
         case .all:
-            print("[Nexio] ➡️  \(request.httpMethod ?? "?") \(URLRedactor.redacted(request.url))")
-            print("[Nexio] ⬅️  \(response.statusCode) (\(data.count) bytes)")
+            logger.info("\(request.httpMethod ?? "?") \(URLRedactor.redacted(request.url)) -> \(response.statusCode) (\(data.count) bytes)")
         }
     }
 }

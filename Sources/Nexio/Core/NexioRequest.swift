@@ -18,6 +18,7 @@ import Foundation
 /// // Later:
 /// task.cancel()
 /// ```
+@available(*, deprecated, message: "Cancel the awaiting Task instead; Nexio never returns NexioRequest.")
 public final class NexioRequest: Sendable {
 
     private let task: _TaskBox
