@@ -21,8 +21,8 @@ Typed JSON requests · Auth strategies · Retry with backoff · Interceptor pipe
 
 ## Features
 
-- **Actor-based** — `NexioClient` is a Swift actor; zero data-race risk, safe to call from any concurrency context
-- **Typed requests** — `get`, `post`, `put`, `patch`, `delete` return decoded `Decodable` values directly
+- **Actor-based** — `NexioClient` is a Swift actor; its internal state is isolated, and it's safe to call from any concurrency context
+- **Typed requests** — `get`, `post`, `put`, `patch` return decoded `Decodable` values; `delete` returns once the server responds successfully
 - **Type-safe endpoints** — `Endpoint` protocol for grouping request details in reusable structs
 - **Auth strategies** — bearer token, API key, custom headers, or dynamic provider (OAuth refresh)
 - **Interceptor pipeline** — adapt requests and retry failures with full control
@@ -30,12 +30,6 @@ Typed JSON requests · Auth strategies · Retry with backoff · Interceptor pipe
 - **SwiftUI image loading** — `NexioImage` drop-in for `AsyncImage` with `URLCache`-backed caching and prefetch
 - **Structured errors** — `NexioError` covers network, auth, 4xx/5xx, and decoding failures
 - **Zero dependencies** — pure Swift, built on `URLSession`
-
----
-
-## Release versioning
-
-The next release for the changes in this branch should be tagged **2.0.0**. The public Swift signatures remain source-compatible, but request behavior changes in ways applications can observe: configured retries now include HTTP 429/5xx responses and can be disabled on reconfiguration, built-in retry policies limit retries to idempotent methods, endpoint auth overrides take precedence, and cancellation uses `CancellationError`. These changes can affect request counts, credentials, and error handling, so a major release is the safer compatibility signal than 1.1.0.
 
 ---
 
@@ -118,7 +112,7 @@ sequenceDiagram
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/ANSCoder/Nexio", from: "1.0.0")
+    .package(url: "https://github.com/ANSCoder/Nexio", from: "2.0.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -186,12 +180,15 @@ await NexioClient.shared.setAuth(.apiKey(header: "X-Api-Key", value: "secret"))
 // Arbitrary headers
 await NexioClient.shared.setAuth(.custom(["X-Tenant-ID": "acme", "X-Version": "2"]))
 
+// Store tokens in the Keychain, never in UserDefaults or source code.
 // Dynamic token — closure called before every request (ideal for OAuth refresh)
 let authInterceptor = AuthInterceptor {
     await TokenStore.shared.currentToken()   // returns AuthStrategy
 }
 await NexioClient.shared.addInterceptor(authInterceptor)
 ```
+
+**Security:** the global auth strategy is sent with every request, including absolute URLs on other hosts (for example a CDN or analytics URL). Before calling a third-party host, use an endpoint with `auth: .some(.none)` so your token isn't sent to it.
 
 ### Per-endpoint auth override
 
@@ -264,7 +261,8 @@ Implement `Interceptor` to hook into every request:
 ```swift
 struct LoggingInterceptor: Interceptor {
     func adapt(_ request: URLRequest, for session: URLSession) async throws -> URLRequest {
-        print("→ \(request.httpMethod ?? "") \(request.url?.absoluteString ?? "")")
+        // Log the path only: query strings can contain tokens or personal data.
+        print("→ \(request.httpMethod ?? "") \(request.url?.path ?? "")")
         return request
     }
     func retry(_ request: URLRequest, dueTo error: NexioError, attempt: Int) async -> Bool {
@@ -295,8 +293,10 @@ do {
 } catch NexioError.serverError(let statusCode, let data) {
     // Handle 5xx
 } catch NexioError.decodingFailed(let underlying, let data) {
-    // Log raw response for debugging
+    // Response bodies can contain personal data. Log them only in debug builds.
+    #if DEBUG
     print(String(data: data, encoding: .utf8) ?? "")
+    #endif
 } catch NexioError.invalidURL(let string) {
     // Bad URL at call site
 }
@@ -306,7 +306,7 @@ do {
 
 ## Image Loading (SwiftUI)
 
-`NexioImage` is a drop-in replacement for `AsyncImage` with transparent `URLCache` caching (50 MB memory / 200 MB disk by default):
+`NexioImage` is a drop-in replacement for `AsyncImage` with `URLCache` caching (50 MB memory / 200 MB disk by default). Cached images are served without revalidation until the cache evicts them, so call `clearCache()` after you replace an image on the server.
 
 ```swift
 // Default — gray placeholder, photo icon on failure
@@ -321,9 +321,10 @@ NexioImage(
     failureImage: { Image(systemName: "person.crop.circle.fill") }
 )
 
-// Prefetch a list for smoother scroll performance
+// Prefetch a list for smoother scrolling. The call suspends until every image is fetched,
+// so run it in a Task (or a background .task) rather than blocking a view update.
 let urls = items.compactMap { URL(string: $0.imageURL) }
-await ImageLoader.shared.prefetch(urls)
+Task { await ImageLoader.shared.prefetch(urls) }
 
 // Clear cache
 await ImageLoader.shared.clearCache()
@@ -337,22 +338,28 @@ await ImageLoader.shared.clearCache()
 
 ```swift
 // Three requests in flight simultaneously
-async let users:    [User]    = NexioClient.shared.get("/users")
-async let posts:    [Post]    = NexioClient.shared.get("/posts")
-async let comments: [Comment] = NexioClient.shared.get("/comments")
+async let users:    [User]    = try NexioClient.shared.get("/users")
+async let posts:    [Post]    = try NexioClient.shared.get("/posts")
+async let comments: [Comment] = try NexioClient.shared.get("/comments")
 
 let (u, p, c) = try await (users, posts, comments)
 ```
 
-Actor isolation covers only the short bookkeeping steps: building requests and applying headers. Network round-trips and JSON decoding run outside the actor, so a large response never blocks other callers.
+Actor isolation covers only the short bookkeeping steps: building requests and applying headers. Network round-trips and JSON decoding run outside the actor, so a large response never blocks other callers. Isolation protects Nexio's own state. Your payload types and interceptor closures must still be `Sendable`.
 
 Cancelling the task that awaits a request stops retries and the network call, and the await throws `CancellationError`:
 
 ```swift
 let task = Task {
-    let posts: [Post] = try await NexioClient.shared.get("/feed")
-    return posts
+    do {
+        let posts: [Post] = try await NexioClient.shared.get("/feed")
+        print(posts.count)
+    } catch is CancellationError {
+        // Expected when the screen goes away. Not a failure.
+    }
 }
+
+// Later, e.g. from onDisappear:
 task.cancel()   // stops retries and the network call
 ```
 
@@ -363,6 +370,7 @@ task.cancel()   // stops retries and the network call
 Inject a custom `URLProtocol` subclass via `NexioConfig.protocolClasses` to stub responses without hitting the network:
 
 ```swift
+let client = NexioClient()
 var config = NexioConfig()
 config.protocolClasses = [MockURLProtocol.self]
 await client.configure(config)
