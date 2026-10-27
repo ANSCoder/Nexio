@@ -67,7 +67,7 @@ public struct NexioConfig: Sendable {
     ///   exempt because protocol classes are always `NSObject` subclasses
     ///   whose class objects are global singletons — safe to share across
     ///   concurrency boundaries as long as callers pass only class literals.
-    public nonisolated(unsafe) var protocolClasses: [AnyClass]?
+    public var protocolClasses: [AnyClass]?
 
     // MARK: - Init
 

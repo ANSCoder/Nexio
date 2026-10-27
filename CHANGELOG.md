@@ -24,11 +24,18 @@ No public signatures changed. The entries below are behavior fixes and internal 
 - Retry is capped at 10 retries per request, so a custom interceptor can't retry indefinitely.
 
 ### Changed
+- Logging uses `os.Logger` (subsystem `com.nexio`) instead of `print`. URLs stay redacted.
+- Swift upcoming features `ExistentialAny` and `MemberImportVisibility` enabled. The experimental `StrictConcurrency` flag is removed; it's implied in Swift 6 mode.
+- `NexioConfig.protocolClasses` no longer needs `nonisolated(unsafe)`.
+- README: minimum Swift version is 6.0, matching `swift-tools-version`.
 - `NexioConfig.retry` is now held by the client and applied inside the request pipeline. It no longer inserts a `RetryInterceptor` into the interceptor list.
 - JSON decoding happens off the `NexioClient` actor.
 - Image decoding in `ImageLoader` happens off the actor.
 - `ImageLoader.prefetch(_:)` fetches at most 4 images at a time.
 - `URLError.cancelled` surfaces as `CancellationError`, not `NexioError.unknown`.
+
+### Deprecated
+- `NexioRequest`: never returned by Nexio. Cancel the awaiting `Task` instead.
 
 ## [1.0.0] - 2026-06-07
 
