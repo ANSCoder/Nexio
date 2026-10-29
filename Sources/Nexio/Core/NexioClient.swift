@@ -226,7 +226,7 @@ public actor NexioClient {
         var request = URLRequest(url: resolvedURL)
         request.httpMethod = HTTPMethod.get.rawValue
         applyDefaultHeaders(to: &request)
-        applyAuth(authStrategy, to: &request)
+        if mayReceiveCredentials(resolvedURL) { applyAuth(authStrategy, to: &request) }
         let (data, http) = try await send(request, skipDynamicAuth: false)
         logIfNeeded(request: request, response: http, data: data)
         if let error = http.nexioError(data: data) { throw error }
@@ -317,8 +317,9 @@ public actor NexioClient {
     /// - Returns: The adapted request.
     private func adapt(_ request: URLRequest, skipDynamicAuth: Bool) async throws -> URLRequest {
         var adapted = request
+        let dynamicAuthAllowed = !skipDynamicAuth && mayReceiveCredentials(request.url)
         for interceptor in interceptors {
-            if skipDynamicAuth, interceptor is AuthInterceptor { continue }
+            if !dynamicAuthAllowed, interceptor is AuthInterceptor { continue }
             adapted = try await interceptor.adapt(adapted, for: session)
         }
         return adapted
@@ -376,7 +377,7 @@ public actor NexioClient {
         request.httpMethod = method.rawValue
         applyDefaultHeaders(to: &request)
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
-        applyAuth(authStrategy, to: &request)
+        if mayReceiveCredentials(resolved) { applyAuth(authStrategy, to: &request) }
         if let body {
             request.httpBody = try encoder.encode(body)
         }
@@ -417,8 +418,13 @@ public actor NexioClient {
             stripCredentialHeaders(from: &request)
             request.httpShouldHandleCookies = false
         } else {
-            let effectiveAuth = endpoint.auth ?? authStrategy
-            applyAuth(effectiveAuth, to: &request)
+            // An explicit endpoint auth is the developer's choice for that host.
+            // Global auth is only sent to the baseURL host.
+            if let endpointAuth = endpoint.auth {
+                applyAuth(endpointAuth, to: &request)
+            } else if mayReceiveCredentials(url) {
+                applyAuth(authStrategy, to: &request)
+            }
         }
 
         if let body = endpoint.body {
@@ -485,6 +491,14 @@ public actor NexioClient {
     /// - Parameters:
     ///   - strategy: The strategy to apply, global or per-endpoint.
     ///   - request: The request to mutate in place.
+    /// Whether SDK-managed credentials (global auth and ``AuthInterceptor``) may be
+    /// sent to `url`. Only the ``NexioConfig/baseURL`` host receives them. With no
+    /// `baseURL` set there is no trusted host, so every host does.
+    private func mayReceiveCredentials(_ url: URL?) -> Bool {
+        guard let trustedHost = config.baseURL?.host else { return true }
+        return url?.host?.lowercased() == trustedHost.lowercased()
+    }
+
     private func applyAuth(_ strategy: AuthStrategy, to request: inout URLRequest) {
         switch strategy {
         case .bearer(let token):

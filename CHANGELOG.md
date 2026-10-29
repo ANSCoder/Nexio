@@ -12,6 +12,7 @@ Nexio uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No public signatures changed. The entries below are behavior fixes and internal changes.
 
 ### Fixed
+- Global auth and `AuthInterceptor` tokens are sent only to the `baseURL` host. Absolute URLs on other hosts no longer receive them. **Behavior change:** if you relied on cross-host auth, pass `auth` on an `Endpoint` for that host.
 - HTTP 5xx and 429 responses are now retried when a retry policy is configured. Previously they were never retried.
 - Per-endpoint `auth` is no longer overwritten by a registered `AuthInterceptor`. `.some(.none)` sends no token.
 - Calling a refresh endpoint from inside an `AuthInterceptor` provider no longer re-enters the same provider.
