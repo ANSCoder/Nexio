@@ -100,4 +100,20 @@ struct RequestBuildingTests {
             #expect(await recorder.last?.value(forHTTPHeaderField: "Authorization") == "Bearer dyn")
         }
     }
+
+    @Test("data(from:) sends global auth only to the baseURL host")
+    func rawDataScopesAuth() async throws {
+        try await mockingNetwork {
+            MockURLProtocol.stub(json: "{}")
+            let recorder = Recorder()
+            let client = await makeClient(recorder: recorder)
+            await client.setAuth(.bearer("secret"))
+
+            _ = try await client.data(from: "https://other.test/img.png")
+            #expect(await recorder.last?.value(forHTTPHeaderField: "Authorization") == nil)
+
+            _ = try await client.data(from: "image.png")
+            #expect(await recorder.last?.value(forHTTPHeaderField: "Authorization") == "Bearer secret")
+        }
+    }
 }
