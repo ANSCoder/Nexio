@@ -188,7 +188,7 @@ let authInterceptor = AuthInterceptor {
 await NexioClient.shared.addInterceptor(authInterceptor)
 ```
 
-**Security:** the global auth strategy is sent with every request, including absolute URLs on other hosts (for example a CDN or analytics URL). Before calling a third-party host, use an endpoint with `auth: .some(.none)` so your token isn't sent to it.
+**Security:** when `baseURL` is set, the global auth strategy and `AuthInterceptor` tokens are sent only to the `baseURL` host. Absolute URLs on other hosts never receive them. To send a token to another host on purpose, use an `Endpoint` with its own `auth`. If `baseURL` isn't set, tokens go to every host, so set one.
 
 ### Per-endpoint auth override
 

@@ -13,7 +13,8 @@ import Foundation
 /// ```swift
 /// struct LoggingInterceptor: Interceptor {
 ///     func adapt(_ request: URLRequest, for session: URLSession) async throws -> URLRequest {
-///         print("→ \(request.httpMethod ?? "") \(request.url?.absoluteString ?? "")")
+///         // Log the path only: query strings can contain tokens or personal data.
+///         print("→ \(request.httpMethod ?? "") \(request.url?.path ?? "")")
 ///         return request
 ///     }
 ///     func retry(_ request: URLRequest, dueTo error: NexioError, attempt: Int) async -> Bool {

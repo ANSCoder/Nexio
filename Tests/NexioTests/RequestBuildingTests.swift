@@ -62,4 +62,58 @@ struct RequestBuildingTests {
             #expect(await recorder.last?.url?.absoluteString == "https://api.test/users?q=a%20b")
         }
     }
+
+    @Test("Global auth is sent to the baseURL host only")
+    func globalAuthStaysOnBaseHost() async throws {
+        try await mockingNetwork {
+            MockURLProtocol.stub(json: "{}")
+            let recorder = Recorder()
+            let client = await makeClient(recorder: recorder)
+            await client.setAuth(.bearer("secret"))
+
+            let _: Empty = try await client.get("https://other.test/track")
+            #expect(await recorder.last?.value(forHTTPHeaderField: "Authorization") == nil)
+
+            let _: Empty = try await client.get("users")
+            #expect(await recorder.last?.value(forHTTPHeaderField: "Authorization") == "Bearer secret")
+        }
+    }
+
+    @Test("AuthInterceptor token is not sent to other hosts")
+    func dynamicAuthStaysOnBaseHost() async throws {
+        try await mockingNetwork {
+            MockURLProtocol.stub(json: "{}")
+            let recorder = Recorder()
+            var config = NexioConfig()
+            config.baseURL = URL(string: "https://api.test")
+            config.protocolClasses = [MockURLProtocol.self]
+            let client = NexioClient()
+            await client.configure(config)
+            // Added before the recorder, so the recorder sees the adapted request.
+            await client.addInterceptor(AuthInterceptor { .bearer("dyn") })
+            await client.addInterceptor(RecordingInterceptor(recorder: recorder))
+
+            let _: Empty = try await client.get("https://other.test/track")
+            #expect(await recorder.last?.value(forHTTPHeaderField: "Authorization") == nil)
+
+            let _: Empty = try await client.get("users")
+            #expect(await recorder.last?.value(forHTTPHeaderField: "Authorization") == "Bearer dyn")
+        }
+    }
+
+    @Test("data(from:) sends global auth only to the baseURL host")
+    func rawDataScopesAuth() async throws {
+        try await mockingNetwork {
+            MockURLProtocol.stub(json: "{}")
+            let recorder = Recorder()
+            let client = await makeClient(recorder: recorder)
+            await client.setAuth(.bearer("secret"))
+
+            _ = try await client.data(from: "https://other.test/img.png")
+            #expect(await recorder.last?.value(forHTTPHeaderField: "Authorization") == nil)
+
+            _ = try await client.data(from: "image.png")
+            #expect(await recorder.last?.value(forHTTPHeaderField: "Authorization") == "Bearer secret")
+        }
+    }
 }

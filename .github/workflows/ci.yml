@@ -31,14 +31,25 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app
           xcodebuild -version
 
+      - name: Boot simulator
+        # Boot explicitly and wait. Otherwise xcodebuild can start the test runner
+        # before the simulator is ready, and the runner hangs until the job times out.
+        run: |
+          xcrun simctl bootstatus "${{ matrix.simulator }}" -b
+
       - name: Build & Test (iOS)
         # pipefail is not set by default, so a failing test would be hidden by a pipe.
         # xcpretty is dropped for the same reason: a missing tool fails the job.
+        # Parallel testing is off and each test has a time limit, so a hang fails in
+        # minutes instead of holding the job for the full timeout.
         run: |
           set -o pipefail
           xcodebuild test \
             -scheme Nexio \
             -destination "platform=iOS Simulator,name=${{ matrix.simulator }},OS=${{ matrix.ios }}" \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -maximum-test-execution-time-allowance 300 \
             -enableCodeCoverage YES \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO
